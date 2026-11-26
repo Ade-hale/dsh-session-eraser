@@ -129,15 +129,23 @@ window.__ModuleLoader__.load({
 
         const t = ctx.locale.bind(NS)
 
-        async function refreshSessions() {
+        /**
+         * Ask the session service whether a session is running.
+         * `ctx.sessions` only exposes `binding(id)` for a retained generation, so
+         * this can legitimately answer "unknown" — the Host still refuses a
+         * running session with 409, and that refusal is shown to the user.
+         */
+        function isRunning(sessionId) {
           try {
-            await ctx.sessions.refresh()
+            const snapshot = ctx.sessions.binding(sessionId)?.session?.getSnapshot?.()
+            if (snapshot && typeof snapshot.running === 'boolean') return snapshot.running
           } catch (error) {
-            console.warn('[session-delete] session list refresh failed', error)
+            console.warn('[session-delete] cannot read session state', error)
           }
+          return null
         }
 
-        async function remove(sessionId, isCurrent) {
+        async function remove(sessionId) {
           let res
           try {
             res = await fetch('/session-delete/delete', {
@@ -158,13 +166,14 @@ window.__ModuleLoader__.load({
             }
             return
           }
-          if (isCurrent) {
-            // The deleted session was the one in the main view: reload so DSH
-            // lands back on a fresh blank session instead of a dead view.
-            window.location.reload()
-            return
+          // The Host broadcasts the official `api-session/removed` event, so the
+          // sidebar and workspace views drop the row on their own. Only a view
+          // that still points at the deleted session needs a reload.
+          try {
+            if (window.location.href.includes(sessionId)) window.location.reload()
+          } catch (error) {
+            console.warn('[session-delete] reload check failed', error)
           }
-          await refreshSessions()
           toast(t('deleted'))
         }
 
@@ -184,15 +193,6 @@ window.__ModuleLoader__.load({
           armedId = null
           if (armedTimer) clearTimeout(armedTimer)
           armedTimer = null
-        }
-
-        function currentSessionId() {
-          const snapshot = ctx.sessions.list.getSnapshot()
-          const rows = snapshot.byId ?? {}
-          for (const row of Object.values(rows)) {
-            if (((row?.retainedBy?.mainView) ?? 0) > 0) return row.id ?? row.sessionId ?? null
-          }
-          return null
         }
 
         // ---------------------------------------------------------------- trash
@@ -242,7 +242,6 @@ window.__ModuleLoader__.load({
               return
             }
             toast(t('trash.restored'))
-            await refreshSessions()
             await load()
           }
 
@@ -378,10 +377,7 @@ window.__ModuleLoader__.load({
           target: 'session',
           order: 700,
           resolve: (target) => {
-            const rows = ctx.sessions.list.getSnapshot().byId ?? {}
-            const row = rows[target.sessionId]
-            const running = row?.running === true
-            const isCurrent = currentSessionId() === target.sessionId
+            const running = isRunning(target.sessionId) === true
             const confirming = armedId === target.sessionId
             return [{
               id: 'delete',
@@ -397,7 +393,7 @@ window.__ModuleLoader__.load({
                   return
                 }
                 disarm()
-                void remove(target.sessionId, isCurrent)
+                void remove(target.sessionId)
               },
             }]
           },

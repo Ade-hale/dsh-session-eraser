@@ -24,7 +24,7 @@ DeepSeek Harness (DSH) sessions can be forked and archived, but never deleted: t
 
 | Step | What it does | Status |
 | --- | --- | --- |
-| **Menu entry** | Adds a red, separator-prefixed **Delete session** entry to the session context menu, after Archive | On a running session the entry is disabled and reads "This session is running and cannot be deleted" |
+| **Menu entry** | Adds a red, separator-prefixed **Delete session** entry to the session context menu, after Archive | When the session service reports the session as running the entry is disabled and reads "This session is running and cannot be deleted"; either way the host answers `409` first |
 | **Two-step confirm** | The first click only arms the action and the menu reads "Click Delete session again to confirm"; it reverts after four seconds | No dialog interrupting the flow, but a single stray click deletes nothing |
 | **Move to trash** | Moves the session directory into `$DSH_HOME/session-delete-trash/` instead of unlinking it | The trashed name keeps a timestamp, the workspace key, and the original directory name, so restores are easy to match |
 | **Trash panel** | **Trash** in the same menu opens a panel: session directory, source workspace, deletion time, size | Restore one entry to its original workspace, delete one forever, or empty the whole trash after a second click |
