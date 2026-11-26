@@ -1,11 +1,31 @@
 {
   "meta": {
     "title": "Delete session",
-    "description": "Adds a Delete session action to the session context menu. Deleting moves the session off disk into a recoverable trash directory and clears its workspace, pin and archive references, so it disappears from the sidebar and workspace view immediately. Right-click a session, then choose Delete session. The session currently open in the main view is deleted and the app returns to a fresh blank session; a session that is still running is refused until it stops. No confirmation dialog is shown."
+    "description": "Adds Delete session and Trash entries to the session context menu. Deleting is two-step: the first click only arms the action and asks for a second click, auto-cancelling after 4 seconds; a session that is still running is refused. A delete moves the session directory into $DSH_HOME/session-delete-trash/ instead of unlinking it, clears the projection cache, the workspace mount, the pin and the archive reference, and broadcasts the official removed event, so the sidebar updates without a page refresh. Trash opens a panel listing each entry with its session directory, workspace, deletion time and size, where an entry can be restored to its original workspace, purged individually, or the whole trash emptied. Entries older than the retention window (30 days by default, tunable with DSH_SESSION_DELETE_RETENTION_DAYS) are purged permanently when the trash is listed or a delete runs. Every Host route enforces a same-origin check (Origin/Host and Sec-Fetch-Site), so a page on another site cannot call it."
   },
   "menu.delete": "Delete session",
   "menu.running": "This session is running and cannot be deleted",
+  "confirm.again": "Click Delete session again to confirm",
   "error.busy": "This session is running; stop it before deleting",
   "error.generic": "Delete failed, please retry",
-  "deleted": "Session deleted"
+  "deleted": "Session deleted",
+  "menu.trash": "Trash",
+  "trash.title": "Session trash",
+  "trash.retention": "Entries past the retention window are purged permanently",
+  "trash.refresh": "Refresh",
+  "trash.empty": "Empty trash",
+  "trash.emptyConfirm": "Click Empty trash again to confirm",
+  "trash.emptyDone": "Trash emptied",
+  "trash.restore": "Restore",
+  "trash.purge": "Delete forever",
+  "trash.none": "The trash is empty",
+  "trash.loading": "Loading…",
+  "trash.failed": "Action failed, please retry",
+  "trash.restored": "Session restored",
+  "trash.purged": "Deleted forever",
+  "trash.col.session": "Session directory",
+  "trash.col.workspace": "Workspace",
+  "trash.col.deleted": "Deleted",
+  "trash.col.size": "Size",
+  "trash.col.actions": "Actions"
 }

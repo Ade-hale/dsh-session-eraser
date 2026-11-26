@@ -1,11 +1,31 @@
 {
   "meta": {
     "title": "删除会话",
-    "description": "在会话右键菜单里增加「删除会话」动作。删除会把会话从磁盘移入可恢复的回收目录，并清掉它的工作区、置顶与归档引用，让它在侧栏和工作区视图里立即消失。在会话上右键，选择「删除会话」即可。删除当前正在查看的会话后会自动回到一个新的空白会话；仍在运行的会话会被拒绝删除，需先停止。没有二次确认弹窗。"
+    "description": "在会话右键菜单里增加「删除会话」与「回收站」。删除采用两步确认：第一次点击只把动作标记为待确认并提示再点一次，4 秒内不确认则自动取消；仍在运行的会话拒绝删除。删除会把会话目录移入 $DSH_HOME/session-delete-trash/ 而不是直接抹掉，同时清掉投影缓存、工作区挂载、置顶与归档引用，并广播官方 removed 事件，所以侧栏立即更新且不需要刷新页面。「回收站」会打开一个列表面板，显示每个条目的会话目录、所属工作区、删除时间与体积，可一键还原到原工作区、彻底删除单条或清空回收站；超过保留期（默认 30 天，可用 DSH_SESSION_DELETE_RETENTION_DAYS 调整）的条目在列举或删除时自动永久清除。所有 Host 路由都做同源校验（Origin/Host 与 Sec-Fetch-Site），跨站页面无法调用。"
   },
   "menu.delete": "删除会话",
   "menu.running": "该会话正在运行，无法删除",
+  "confirm.again": "再点一次「删除会话」确认删除",
   "error.busy": "该会话正在运行，请先停止再删除",
   "error.generic": "删除失败，请重试",
-  "deleted": "会话已删除"
+  "deleted": "会话已删除",
+  "menu.trash": "回收站",
+  "trash.title": "会话回收站",
+  "trash.retention": "超过保留期的条目会被永久清除",
+  "trash.refresh": "刷新",
+  "trash.empty": "清空回收站",
+  "trash.emptyConfirm": "再点一次确认清空回收站",
+  "trash.emptyDone": "回收站已清空",
+  "trash.restore": "还原",
+  "trash.purge": "彻底删除",
+  "trash.none": "回收站是空的",
+  "trash.loading": "加载中…",
+  "trash.failed": "操作失败，请重试",
+  "trash.restored": "会话已还原",
+  "trash.purged": "已彻底删除",
+  "trash.col.session": "会话目录",
+  "trash.col.workspace": "工作区",
+  "trash.col.deleted": "删除时间",
+  "trash.col.size": "大小",
+  "trash.col.actions": "操作"
 }
