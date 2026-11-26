@@ -1,0 +1,7 @@
+# session-delete bundle patch: one Host row mounts the delete route.
+# The browser half is declared by package.json `dsh.client` and binds to the
+# row named after the bare package.
+- insert:
+    - id: session-eraser
+      name: 'dsh-session-eraser'
+      config: {}

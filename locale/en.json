@@ -1,0 +1,11 @@
+{
+  "meta": {
+    "title": "Delete session",
+    "description": "Adds a Delete session action to the session context menu. Deleting moves the session off disk into a recoverable trash directory and clears its workspace, pin and archive references, so it disappears from the sidebar and workspace view immediately. Right-click a session, then choose Delete session. The session currently open in the main view is deleted and the app returns to a fresh blank session; a session that is still running is refused until it stops. No confirmation dialog is shown."
+  },
+  "menu.delete": "Delete session",
+  "menu.running": "This session is running and cannot be deleted",
+  "error.busy": "This session is running; stop it before deleting",
+  "error.generic": "Delete failed, please retry",
+  "deleted": "Session deleted"
+}

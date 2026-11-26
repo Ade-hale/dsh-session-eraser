@@ -1,0 +1,65 @@
+{
+  "name": "dsh-session-eraser",
+  "description": "Adds a Delete session action to the session context menu, removing the session from disk (recoverable via a trash directory) and clearing its workspace, pin and archive references.",
+  "version": "0.1.0",
+  "publishConfig": {
+    "access": "public"
+  },
+  "icon": "icon.svg",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./package.json": "./package.json",
+    "./locale/*": "./locale/*"
+  },
+  "dsh": {
+    "engines": {
+      "dsh": ">=0.2.2-rc.5"
+    },
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-context-menu",
+        "@deepseek-ai/dsh-api-session-controller",
+        "@deepseek-ai/dsh-client-locale"
+      ],
+      "platform": "web"
+    }
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "locale",
+    "icon.svg",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "dsh-plugin",
+    "cordis",
+    "session",
+    "delete",
+    "web-ui"
+  ],
+  "license": "MIT",
+  "author": "Ade-hale",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Ade-hale/dsh-session-eraser.git"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh": ">=0.2.2-rc.5"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh": {
+      "optional": true
+    }
+  }
+}
