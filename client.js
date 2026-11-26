@@ -137,7 +137,9 @@ window.__ModuleLoader__.load({
          */
         function isRunning(sessionId) {
           try {
-            const snapshot = ctx.sessions.binding(sessionId)?.session?.getSnapshot?.()
+            if (typeof ctx.sessions?.binding !== 'function') return null
+            const face = ctx.sessions.binding(sessionId)?.session
+            const snapshot = face?.getSnapshot?.() ?? face?.store?.getSnapshot?.()
             if (snapshot && typeof snapshot.running === 'boolean') return snapshot.running
           } catch (error) {
             console.warn('[session-delete] cannot read session state', error)
@@ -349,19 +351,54 @@ window.__ModuleLoader__.load({
           ])
         }
 
+        // A glyph so the panel also has a permanent sidebar entry next to the
+        // Plugins and Tasks panels rather than being reachable only from a menu.
+        function TrashIcon({ size }) {
+          const edge = typeof size === 'number' && size > 0 ? size : 16
+          const common = {
+            fill: 'none',
+            stroke: 'currentColor',
+            strokeWidth: 1.4,
+            strokeLinecap: 'round',
+            strokeLinejoin: 'round',
+          }
+          return React.createElement('svg', {
+            width: edge,
+            height: edge,
+            viewBox: '0 0 16 16',
+            'aria-hidden': 'true',
+          }, [
+            React.createElement('path', { key: 'rule', d: 'M2.6 4.6h10.8', ...common }),
+            React.createElement('path', { key: 'lid', d: 'M6.2 4.6V3.4a.6.6 0 0 1 .6-.6h2.4a.6.6 0 0 1 .6.6v1.2', ...common }),
+            React.createElement('path', { key: 'body', d: 'M4.2 4.6l.6 8.1a1 1 0 0 0 1 .9h4.4a1 1 0 0 0 1-.9l.6-8.1', ...common }),
+            React.createElement('path', { key: 'slat', d: 'M6.8 7.2v3.6M9.2 7.2v3.6', ...common }),
+          ])
+        }
+
         ctx.effect(() => ctx.slots.inject('main', () => ctx.slots.register({
           name: 'main',
           key: TRASH_PANEL,
           order: 20,
+          locale: NS,
         }, TrashPanel)), 'session-delete: trash panel')
+
+        ctx.effect(() => ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
+          name: 'sidebar.panellist',
+          id: TRASH_PANEL,
+          order: 30,
+          locale: NS,
+          label: () => t('menu.trash'),
+        }, TrashIcon)), 'session-delete: trash sidebar entry')
 
         ctx.effect(() => ctx.contextMenus.register({
           id: 'session.trash',
           target: 'session',
           order: 710,
+          observe: () => [ctx.locale],
           resolve: () => [{
             id: 'trash',
             label: t('menu.trash'),
+            failureLabel: t('trash.failed'),
             run: () => {
               try {
                 ctx.layout.selectPanel(TRASH_PANEL)
@@ -376,6 +413,7 @@ window.__ModuleLoader__.load({
           id: 'session.delete',
           target: 'session',
           order: 700,
+          observe: () => [ctx.locale],
           resolve: (target) => {
             const running = isRunning(target.sessionId) === true
             const confirming = armedId === target.sessionId
@@ -385,6 +423,7 @@ window.__ModuleLoader__.load({
               danger: true,
               separatorBefore: true,
               disabled: running,
+              failureLabel: t('error.generic'),
               run: () => {
                 if (running) return
                 if (armedId !== target.sessionId) {
