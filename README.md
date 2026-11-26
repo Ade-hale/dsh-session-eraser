@@ -1,43 +1,91 @@
+<p align="center"><img src="./icon.svg" width="72" alt="dsh-session-eraser 图标：红色垃圾桶" /></p>
+
 # dsh-session-eraser
 
-Add a **Delete session** action to the DeepSeek Harness (DSH) web GUI session context menu. DSH ships only fork and archive for sessions; this plugin adds the missing delete so a session can actually be removed.
+**删除应该是真的删除，但误删不该变成事故。**
 
-## Features
+Delete should mean delete — and a misclick shouldn't mean disaster.
 
-- Adds a red, separator-prefixed **Delete session** entry to the right-click menu of a session, after **Archive session**.
-- Deleting moves the session directory into `$DSH_HOME/session-delete-trash/` instead of unlinking it, so a mistaken click is recoverable from disk.
-- Clears derived state in one pass: the projection cache entry, the workspace `sessionIds` membership, and the pin / archive references (through the durable workspace registry).
-- Broadcasts the official `api-session/removed` event so the sidebar and workspace view update immediately, without a page reload.
-- A session that is still running is refused (`409`) and reported, since its log file is held open.
-- Deleting the session currently open in the main view returns the app to a fresh blank session.
-- No confirmation dialog — click to delete, recover from the trash directory if needed.
+DeepSeek Harness 插件 · Web GUI · 需要 DSH ≥ 0.2.2-rc.5 · MIT
 
-## Install
+**简体中文** · [English](./README.en.md)
+
+DeepSeek Harness（DSH）的会话只有 fork 和归档，没有删除：会话越攒越多，想彻底移除一个却无从下手。这个插件给会话右键菜单补上缺失的「删除会话」：会话目录从磁盘移走，工作区、置顶、归档引用一并清掉，侧栏立即刷新——但目录不是被直接抹除，而是移进回收目录，点错了还能从磁盘捡回来。
+
+> 在侧栏右键一个会话 → 选择红色的「**删除会话**」
+>
+> 会话立即从列表消失，并弹出「会话已删除」提示。
+
+**它删得干净，但留了一条后悔药：回收目录。**
+
+> **当前版本：v0.1.0** — 由主机端（`index.js`，注册删除路由）与客户端（`client.js`，注册右键菜单动作）两半组成。没有二次确认弹窗；仍在运行的会话会被拒绝删除。仅支持 Web GUI。
+
+## 功能与当前状态
+
+| 环节 | 做什么 | 当前状态 |
+| --- | --- | --- |
+| **菜单入口** | 在会话右键菜单里加一条红色、带分隔线的「删除会话」，排在归档之后 | 正在运行的会话上该项置灰，并改显示「该会话正在运行，无法删除」 |
+| **移入回收目录** | 把会话目录移入 `$DSH_HOME/session-delete-trash/`，而不是直接 unlink | 目录名保留时间戳、工作区与原目录名，方便对应恢复 |
+| **清理引用** | 一次清掉投影缓存、工作区的 `sessionIds` 成员、置顶与归档引用（走持久化工作区注册表） | 各项清理互相独立，单项失败不回滚已完成的删除，只记日志 |
+| **即时刷新** | 广播官方 `api-session/removed` 事件 | 侧栏与工作区视图立即更新，无需刷新页面 |
+| **运行中保护** | 正在运行的会话日志文件被占用，删除返回 `409` 并提示先停止 | 移动失败时已移动的目录会尽力回滚，保证不删一半 |
+| **删除当前会话** | 删掉主视图里正打开的会话后，页面自动重载 | 回到一个新的空白会话，不会停在失效视图上 |
+
+### 删除时发生了什么
+
+1. 客户端把 `sessionId` 发给主机端路由 `POST /session-delete/delete`；主机先校验 id 格式。
+2. 主机在所有工作区下查找该会话的磁盘目录——原始 id、`session-` 前缀有无、路径编码形式都会尝试，避免因 id 写法不同而找不到。
+3. 找到的目录逐个移入回收目录；任一移动失败则回滚已移动的目录并返回 `409`，不留副作用。
+4. 随后清投影缓存，并通过工作区注册表解除置顶、取消归档、从各工作区摘除该会话。
+5. 最后广播 `api-session/removed`，所有客户端立即把该会话从列表移除。
+
+## 安装
 
 ```sh
 dsh plugin --profile <name> add dsh-session-eraser
 ```
 
-Or install the local directory / a git URL. After install, refresh the web GUI (Ctrl+R) so the client bundle loads.
+也可以安装本地目录或 git URL。装好后刷新 Web GUI（Ctrl+R），让客户端 bundle 加载生效。
 
-## Use
+## 用法
 
-1. Right-click a session in the sidebar (or open its “…” menu).
-2. Choose **Delete session**.
-3. The session disappears from the list; a toast confirms it.
+1. 在侧栏右键一个会话（或打开它的「…」菜单）。
+2. 选择「**删除会话**」。
+3. 会话从列表消失，右下角弹出确认提示。
 
-Recover a deleted session by moving its directory from `$DSH_HOME/session-delete-trash/` back to `$DSH_HOME/sessions/<workspace-key>/<session-id>/`.
+### 恢复误删的会话
 
-## How it works
+删除不是抹除：会话目录被移到了回收目录，名字形如 `<时间戳>--<工作区 key>--<原目录名>`。把整个目录移回原位置即可恢复：
 
-- **Host half** (`index.js`) registers `POST /session-delete/delete { sessionId }`. It locates the session directory across every workspace key (trying the raw, `session-`-prefixed, and path-encoded spellings of the id), moves it into the trash, drops the projection cache, detaches the session from its workspace, unpins and unarchives it, and emits `api-session/removed`.
-- **Client half** (`client.js`) registers a `session.delete` action on the shared `session` context menu and calls the route; it disables the entry while the session is running.
+```sh
+mv "$DSH_HOME/session-delete-trash/<时间戳>--<工作区 key>--<原目录名>" \
+   "$DSH_HOME/sessions/<工作区 key>/<原目录名>"
+```
 
-## Limitations
+移回后刷新 GUI，会话会重新出现在列表里。回收目录不会自动清理，确认不再需要时可自行删除其中内容。
 
-- Only the disk log, workspace membership and pin/archive references are cleaned. Indexes kept by third-party plugins (e.g. context insight or memory systems) may retain their own references and must be cleaned in those plugins.
-- A running session cannot be deleted until its work stops.
+## 边界与限制
+
+- **没有二次确认。** 这是刻意的取舍：删除靠回收目录兜底，而不是靠弹窗打断。介意手滑的话，先记住回收目录的位置。
+- **运行中的会话删不掉。** 日志文件被占用时删除会被拒绝（`409`），先让它停下来再删；在 Windows 上这一点尤其明显。
+- **只清自己管辖的范围。** 清理的是磁盘日志、工作区成员关系与置顶/归档引用；第三方插件自己维护的索引（如上下文洞察、记忆系统）可能仍保留该会话的引用，需要在那些插件里各自清理。
+- **仅 Web GUI。** 客户端依赖 Web 端的上下文菜单与会话控制器，没有覆盖其他端。
+- **回收目录只进不出。** 插件不会自动过期或清空回收目录，长期使用记得偶尔手动清理。
+
+## 接下来做什么
+
+以下为设想，尚未排期，欢迎在 issue 里讨论优先级：
+
+| 方向 | 说明 |
+| --- | --- |
+| **回收目录管理** | 在 GUI 里列出已删除会话、一键恢复、按时间批量清理 |
+| **可选的二次确认** | 给想要弹窗确认的用户一个开关，默认仍保持现在的直接删除 |
+| **批量删除** | 多选会话一次清理，适合集中整理旧会话 |
+
+## 参与开发
+
+欢迎围绕删除边界、恢复流程、不同会话来源的 id 兼容性提交 [Issue](https://github.com/Ade-hale/dsh-session-eraser/issues) 或 Pull Request。反馈问题时请注明 DSH 版本、操作系统，以及会话是正在运行还是已停止——删除行为在这几种情况下差别很大。
 
 ## License
 
-MIT
+本项目采用 [MIT License](./LICENSE)。
