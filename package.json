@@ -1,7 +1,7 @@
 {
   "name": "dsh-session-eraser",
-  "description": "Adds Delete session (two-step confirm) and a Trash panel to the session context menu: sessions move into a recoverable trash with restore, purge and a 30-day retention window, while workspace, pin and archive references are cleared.",
-  "version": "0.2.0",
+  "description": "Adds Delete session (confirmation dialog) and a Trash panel to the session context menu: sessions move into a recoverable trash with restore, purge and a 30-day retention window, while workspace, pin and archive references are cleared.",
+  "version": "0.2.1",
   "publishConfig": {
     "access": "public"
   },

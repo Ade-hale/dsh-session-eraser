@@ -2,17 +2,19 @@
  * dsh-session-eraser — Client half.
  *
  * Adds two entries to the shared session context menu (`target: 'session'`):
- *   session.delete — two-step delete, so a single stray click cannot destroy a
- *                    whole conversation. The first click arms the action for a
- *                    few seconds and the menu asks again; the second click
- *                    deletes. A running session stays disabled.
+ *   session.delete — asks first. The menu has no dialog of its own and a plugin
+ *                    may not import the shipped UI primitives, so the question
+ *                    is our own surface in the frame-wide `shell.overlay` slot
+ *                    (the same layer the shipped rename dialog uses): the
+ *                    session title, 「否」 and a red 「是，删除」. A running session
+ *                    stays disabled in the menu.
  *   session.trash  — opens the Trash panel (registered on the keyed `main`
  *                    slot) where deleted sessions can be restored, purged, or
  *                    the whole trash emptied.
  *
- * After a delete or restore the session list is refreshed; deleting the session
- * that is open in the main view reloads the page, because the log underneath it
- * is gone.
+ * The Host broadcasts the official `api-session/removed` event after a delete, so
+ * the sidebar drops the row on its own; only the view that still shows the
+ * deleted session needs a reload, because the log underneath it is gone.
  */
 window.__ModuleLoader__.load({
   id: 'dsh-session-eraser',
@@ -74,7 +76,10 @@ window.__ModuleLoader__.load({
           zh: {
             'menu.delete': '删除会话',
             'menu.running': '该会话正在运行，无法删除',
-            'confirm.again': '再点一次「删除会话」确认删除',
+            'confirm.title': '删除这个会话？',
+            'confirm.body': '会话会被移入回收站，之后可以在「回收站」面板里还原。',
+            'confirm.cancel': '否',
+            'confirm.ok': '是，删除',
             'error.busy': '该会话正在运行，请先停止再删除',
             'error.generic': '删除失败，请重试',
             'deleted': '会话已删除',
@@ -101,7 +106,10 @@ window.__ModuleLoader__.load({
           en: {
             'menu.delete': 'Delete session',
             'menu.running': 'This session is running and cannot be deleted',
-            'confirm.again': 'Click Delete session again to confirm',
+            'confirm.title': 'Delete this session?',
+            'confirm.body': 'The session moves to the trash, where you can restore it later.',
+            'confirm.cancel': 'No',
+            'confirm.ok': 'Yes, delete',
             'error.busy': 'This session is running; stop it before deleting',
             'error.generic': 'Delete failed, please retry',
             'deleted': 'Session deleted',
@@ -179,22 +187,137 @@ window.__ModuleLoader__.load({
           toast(t('deleted'))
         }
 
-        // One confirmation is armed at a time: reopening the menu within the
-        // window shows the confirming label instead of silently deleting.
-        let armedId = null
-        let armedTimer = null
-        function arm(sessionId) {
-          armedId = sessionId
-          if (armedTimer) clearTimeout(armedTimer)
-          armedTimer = setTimeout(() => {
-            armedId = null
-            armedTimer = null
-          }, ARMED_MS)
+        // ------------------------------------------------------------- confirm
+        // One pending confirmation at a time. The question is rendered by our
+        // own component in the frame-wide `shell.overlay` layer; the menu only
+        // opens it, so the delete itself never happens on a stray menu click.
+        let pending = null
+        const listeners = new Set()
+
+        function setPending(next) {
+          pending = next
+          for (const listener of listeners) listener()
         }
-        function disarm() {
-          armedId = null
-          if (armedTimer) clearTimeout(armedTimer)
-          armedTimer = null
+
+        function subscribe(listener) {
+          listeners.add(listener)
+          return () => {
+            listeners.delete(listener)
+          }
+        }
+
+        function dialogButton(danger) {
+          return {
+            padding: '6px 16px',
+            fontSize: '13px',
+            lineHeight: '1.4',
+            borderRadius: '8px',
+            cursor: 'pointer',
+            border: `1px solid ${danger ? '#d9534f' : 'rgba(127,127,127,0.45)'}`,
+            background: danger ? '#d9534f' : 'transparent',
+            color: danger ? '#ffffff' : 'inherit',
+          }
+        }
+
+        function ConfirmOverlay() {
+          const [state, setState] = React.useState(pending)
+          const [busy, setBusy] = React.useState(false)
+
+          React.useEffect(() => subscribe(() => setState(pending)), [])
+
+          const close = React.useCallback(() => {
+            if (busy) return
+            setPending(null)
+          }, [busy])
+
+          React.useEffect(() => {
+            if (!state) return undefined
+            const onKey = (event) => {
+              if (event.key !== 'Escape') return
+              event.stopPropagation()
+              setPending(null)
+            }
+            window.addEventListener('keydown', onKey, true)
+            return () => window.removeEventListener('keydown', onKey, true)
+          }, [state])
+
+          if (!state) return null
+
+          const confirm = async () => {
+            if (busy) return
+            setBusy(true)
+            try {
+              await remove(state.sessionId)
+            } finally {
+              setBusy(false)
+              setPending(null)
+            }
+          }
+
+          return React.createElement('div', {
+            role: 'presentation',
+            onClick: (event) => {
+              if (event.target === event.currentTarget) close()
+            },
+            style: {
+              position: 'fixed',
+              inset: '0',
+              zIndex: 2147482000,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'rgba(15, 18, 24, 0.42)',
+              pointerEvents: 'auto',
+            },
+          }, React.createElement('div', {
+            role: 'dialog',
+            'aria-modal': 'true',
+            'aria-label': t('confirm.title'),
+            style: {
+              width: '360px',
+              maxWidth: 'calc(100vw - 48px)',
+              padding: '20px',
+              borderRadius: '12px',
+              background: 'var(--dsw-alias-bg-elevated, var(--dsw-alias-bg-base, #ffffff))',
+              color: 'var(--dsw-alias-label-primary, inherit)',
+              boxShadow: '0 18px 48px rgba(0,0,0,0.28)',
+              fontSize: '14px',
+              lineHeight: 1.6,
+            },
+          }, [
+            React.createElement('div', {
+              key: 'title',
+              style: { fontSize: '15px', fontWeight: 600, marginBottom: '8px' },
+            }, t('confirm.title')),
+            React.createElement('div', {
+              key: 'body',
+              style: { opacity: 0.82, marginBottom: '8px' },
+            }, t('confirm.body')),
+            state.title
+              ? React.createElement('div', {
+                key: 'name',
+                style: { fontSize: '12px', opacity: 0.62, marginBottom: '16px', wordBreak: 'break-all' },
+              }, state.title)
+              : null,
+            React.createElement('div', {
+              key: 'footer',
+              style: { display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '16px' },
+            }, [
+              React.createElement('button', {
+                key: 'cancel',
+                type: 'button',
+                onClick: close,
+                style: dialogButton(false),
+              }, t('confirm.cancel')),
+              React.createElement('button', {
+                key: 'ok',
+                type: 'button',
+                disabled: busy,
+                onClick: () => void confirm(),
+                style: dialogButton(true),
+              }, busy ? t('trash.loading') : t('confirm.ok')),
+            ]),
+          ]))
         }
 
         // ---------------------------------------------------------------- trash
@@ -390,6 +513,13 @@ window.__ModuleLoader__.load({
           label: () => t('menu.trash'),
         }, TrashIcon)), 'session-delete: trash sidebar entry')
 
+        ctx.effect(() => ctx.slots.inject('shell.overlay', () => ctx.slots.register({
+          name: 'shell.overlay',
+          id: 'session-eraser.confirm',
+          order: 60,
+          locale: NS,
+        }, ConfirmOverlay)), 'session-delete: confirm overlay')
+
         ctx.effect(() => ctx.contextMenus.register({
           id: 'session.trash',
           target: 'session',
@@ -416,23 +546,19 @@ window.__ModuleLoader__.load({
           observe: () => [ctx.locale],
           resolve: (target) => {
             const running = isRunning(target.sessionId) === true
-            const confirming = armedId === target.sessionId
             return [{
               id: 'delete',
-              label: running ? t('menu.running') : confirming ? t('confirm.again') : t('menu.delete'),
+              label: running ? t('menu.running') : t('menu.delete'),
               danger: true,
               separatorBefore: true,
               disabled: running,
               failureLabel: t('error.generic'),
               run: () => {
                 if (running) return
-                if (armedId !== target.sessionId) {
-                  arm(target.sessionId)
-                  toast(t('confirm.again'))
-                  return
-                }
-                disarm()
-                void remove(target.sessionId)
+                setPending({
+                  sessionId: target.sessionId,
+                  title: target.displayTitle ?? null,
+                })
               },
             }]
           },
