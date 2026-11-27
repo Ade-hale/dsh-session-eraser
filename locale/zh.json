@@ -1,14 +1,12 @@
 {
   "meta": {
     "title": "删除会话",
-    "description": "在会话右键菜单里增加「删除会话」与「回收站」。删除会先询问：菜单项会打开一个确认弹窗，显示会话标题以及「否」「是，删除」（红色）两个按钮，弹窗渲染在全局浮层里；仍在运行的会话拒绝删除。删除会把会话目录移入 $DSH_HOME/session-delete-trash/ 而不是直接抹掉，同时清掉投影缓存、工作区挂载、置顶与归档引用，并广播官方 removed 事件，所以侧栏立即更新且不需要刷新页面。「回收站」会打开一个列表面板，显示每个条目的会话目录、所属工作区、删除时间与体积，可一键还原到原工作区、彻底删除单条或清空回收站；超过保留期（默认 30 天，可用 DSH_SESSION_DELETE_RETENTION_DAYS 调整）的条目在列举或删除时自动永久清除。所有 Host 路由都做同源校验（Origin/Host 与 Sec-Fetch-Site），跨站页面无法调用。"
+    "description": "在会话右键菜单里增加「删除会话」与「回收站」。删除会先问：点「删除会话」后，在鼠标位置弹出一个小卡片询问是否删除，红色高亮的是「否」；它不抢焦点，点「否」、点别处或按 Esc 都会收起，选「是」才会真正删除。仍在运行的会话拒绝删除。删除会把会话目录移入 $DSH_HOME/session-delete-trash/ 而不是直接抹掉，同时清掉投影缓存、工作区挂载、置顶与归档引用，并广播官方 removed 事件，所以侧栏立即更新且不需要刷新页面。「回收站」会打开一个列表面板，显示每个条目的会话目录、所属工作区、删除时间与体积，可一键还原到原工作区、彻底删除单条或清空回收站；超过保留期（默认 30 天，可用 DSH_SESSION_DELETE_RETENTION_DAYS 调整）的条目在列举或删除时自动永久清除。所有 Host 路由都做同源校验（Origin/Host 与 Sec-Fetch-Site），跨站页面无法调用。"
   },
   "menu.delete": "删除会话",
   "menu.running": "该会话正在运行，无法删除",
-  "confirm.title": "删除这个会话？",
-  "confirm.body": "会话会被移入回收站，之后可以在「回收站」面板里还原。",
   "confirm.cancel": "否",
-  "confirm.ok": "是，删除",
+  "confirm.ok": "是",
   "error.busy": "该会话正在运行，请先停止再删除",
   "error.generic": "删除失败，请重试",
   "deleted": "会话已删除",
@@ -30,5 +28,6 @@
   "trash.col.workspace": "工作区",
   "trash.col.deleted": "删除时间",
   "trash.col.size": "大小",
-  "trash.col.actions": "操作"
+  "trash.col.actions": "操作",
+  "confirm.title": "删除这个会话？"
 }

@@ -2,12 +2,14 @@
  * dsh-session-eraser — Client half.
  *
  * Adds two entries to the shared session context menu (`target: 'session'`):
- *   session.delete — asks first. The menu has no dialog of its own and a plugin
- *                    may not import the shipped UI primitives, so the question
- *                    is our own surface in the frame-wide `shell.overlay` slot
- *                    (the same layer the shipped rename dialog uses): the
- *                    session title, 「否」 and a red 「是，删除」. A running session
- *                    stays disabled in the menu.
+ *   session.delete — asks first. The framework closes the menu before an action
+ *                    runs and a plugin may not import the shipped UI primitives,
+ *                    so the question is a submenu of this entry: choose 「删除
+ *                    会话」 and the safe 「否」 (highlighted) and the red 「是」
+ *                    appear beside it while the menu stays exactly where it is.
+ *                    Picking either one closes the menu; so does clicking
+ *                    anywhere else or pressing Esc. A running session stays
+ *                    disabled in the menu.
  *   session.trash  — opens the Trash panel (registered on the keyed `main`
  *                    slot) where deleted sessions can be restored, purged, or
  *                    the whole trash emptied.
@@ -77,9 +79,8 @@ window.__ModuleLoader__.load({
             'menu.delete': '删除会话',
             'menu.running': '该会话正在运行，无法删除',
             'confirm.title': '删除这个会话？',
-            'confirm.body': '会话会被移入回收站，之后可以在「回收站」面板里还原。',
             'confirm.cancel': '否',
-            'confirm.ok': '是，删除',
+            'confirm.ok': '是',
             'error.busy': '该会话正在运行，请先停止再删除',
             'error.generic': '删除失败，请重试',
             'deleted': '会话已删除',
@@ -107,9 +108,8 @@ window.__ModuleLoader__.load({
             'menu.delete': 'Delete session',
             'menu.running': 'This session is running and cannot be deleted',
             'confirm.title': 'Delete this session?',
-            'confirm.body': 'The session moves to the trash, where you can restore it later.',
             'confirm.cancel': 'No',
-            'confirm.ok': 'Yes, delete',
+            'confirm.ok': 'Yes',
             'error.busy': 'This session is running; stop it before deleting',
             'error.generic': 'Delete failed, please retry',
             'deleted': 'Session deleted',
@@ -188,61 +188,109 @@ window.__ModuleLoader__.load({
         }
 
         // ------------------------------------------------------------- confirm
-        // One pending confirmation at a time. The question is rendered by our
-        // own component in the frame-wide `shell.overlay` layer; the menu only
-        // opens it, so the delete itself never happens on a stray menu click.
+        // `ctx.contextMenus` dismisses the menu before it runs the chosen action
+        // and no plugin API can hold it open, so the question cannot live in the
+        // menu. Re-opening the menu was the previous attempt, and re-opening is
+        // what moved: the menu is placed by CSS anchor positioning with a
+        // fallback side, so a second open may legally land somewhere else. The
+        // menu is therefore left to close, and the question appears where the
+        // pointer was: one surface, nothing beside it to drift against.
         let pending = null
         const listeners = new Set()
+        let anchor = { x: null, y: null }
 
         function setPending(next) {
           pending = next
-          for (const listener of listeners) listener()
+          for (const listener of listeners) {
+            try {
+              listener()
+            } catch (error) {
+              console.warn('[session-delete] confirm listener failed', error)
+            }
+          }
         }
 
         function subscribe(listener) {
           listeners.add(listener)
-          return () => {
-            listeners.delete(listener)
-          }
+          return () => listeners.delete(listener)
         }
 
-        function dialogButton(danger) {
-          return {
-            padding: '6px 16px',
+        function buttonStyle(kind) {
+          const style = {
+            minWidth: '56px',
+            padding: '4px 12px',
+            borderRadius: '6px',
+            font: 'inherit',
             fontSize: '13px',
-            lineHeight: '1.4',
-            borderRadius: '8px',
+            lineHeight: '20px',
             cursor: 'pointer',
-            border: `1px solid ${danger ? '#d9534f' : 'rgba(127,127,127,0.45)'}`,
-            background: danger ? '#d9534f' : 'transparent',
-            color: danger ? '#ffffff' : 'inherit',
+          }
+          // "否" is the safe answer, so it carries the emphasis.
+          if (kind === 'cancel') {
+            return {
+              ...style,
+              border: '1px solid #d9534f',
+              background: '#d9534f',
+              color: '#ffffff',
+              fontWeight: '600',
+            }
+          }
+          return {
+            ...style,
+            border: '1px solid rgba(127,127,127,0.42)',
+            background: 'transparent',
+            color: 'inherit',
           }
         }
 
-        function ConfirmOverlay() {
+        const POPOVER_WIDTH = 232
+        const POPOVER_HEIGHT = 112
+        const EDGE = 8
+
+        function viewportPoint() {
+          const x = anchor.x === null ? Math.round(window.innerWidth / 2) : anchor.x
+          const y = anchor.y === null ? Math.round(window.innerHeight / 2) : anchor.y
+          return { x, y }
+        }
+
+        function popoverPosition(point) {
+          const maxLeft = Math.max(EDGE, window.innerWidth - POPOVER_WIDTH - EDGE)
+          const left = Math.min(Math.max(point.x - 12, EDGE), maxLeft)
+          const below = point.y + 10
+          const top = below + POPOVER_HEIGHT > window.innerHeight - EDGE
+            ? Math.max(EDGE, point.y - POPOVER_HEIGHT - 10)
+            : below
+          return { left, top }
+        }
+
+        function ConfirmPopover() {
           const [state, setState] = React.useState(pending)
           const [busy, setBusy] = React.useState(false)
+          const box = React.useRef(null)
 
           React.useEffect(() => subscribe(() => setState(pending)), [])
 
-          const close = React.useCallback(() => {
-            if (busy) return
-            setPending(null)
-          }, [busy])
-
           React.useEffect(() => {
             if (!state) return undefined
-            const onKey = (event) => {
-              if (event.key !== 'Escape') return
-              event.stopPropagation()
-              setPending(null)
+            const escape = (event) => {
+              if (event.key === 'Escape') {
+                event.stopPropagation()
+                setPending(null)
+              }
             }
-            window.addEventListener('keydown', onKey, true)
-            return () => window.removeEventListener('keydown', onKey, true)
+            const outside = (event) => {
+              if (box.current && !box.current.contains(event.target)) setPending(null)
+            }
+            window.addEventListener('keydown', escape, true)
+            document.addEventListener('pointerdown', outside, true)
+            return () => {
+              window.removeEventListener('keydown', escape, true)
+              document.removeEventListener('pointerdown', outside, true)
+            }
           }, [state])
 
           if (!state) return null
-
+          const place = popoverPosition({ x: state.x, y: state.y })
           const confirm = async () => {
             if (busy) return
             setBusy(true)
@@ -253,74 +301,75 @@ window.__ModuleLoader__.load({
               setPending(null)
             }
           }
-
           return React.createElement('div', {
-            role: 'presentation',
-            onClick: (event) => {
-              if (event.target === event.currentTarget) close()
-            },
+            ref: box,
+            role: 'dialog',
+            'aria-label': t('confirm.title'),
+            'data-session-eraser': 'confirm',
             style: {
               position: 'fixed',
-              inset: '0',
-              zIndex: 2147482000,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              background: 'rgba(15, 18, 24, 0.42)',
-              pointerEvents: 'auto',
-            },
-          }, React.createElement('div', {
-            role: 'dialog',
-            'aria-modal': 'true',
-            'aria-label': t('confirm.title'),
-            style: {
-              width: '360px',
-              maxWidth: 'calc(100vw - 48px)',
-              padding: '20px',
-              borderRadius: '12px',
+              left: place.left + 'px',
+              top: place.top + 'px',
+              width: POPOVER_WIDTH + 'px',
+              boxSizing: 'border-box',
+              padding: '12px',
+              borderRadius: '10px',
+              border: '1px solid rgba(127,127,127,0.28)',
               background: 'var(--dsw-alias-bg-elevated, var(--dsw-alias-bg-base, #ffffff))',
               color: 'var(--dsw-alias-label-primary, inherit)',
-              boxShadow: '0 18px 48px rgba(0,0,0,0.28)',
-              fontSize: '14px',
-              lineHeight: 1.6,
+              boxShadow: '0 12px 32px rgba(0,0,0,0.24)',
+              zIndex: 2147482900,
+              pointerEvents: 'auto',
+              WebkitAppRegion: 'no-drag',
+              fontSize: '13px',
+              lineHeight: '20px',
             },
           }, [
-            React.createElement('div', {
-              key: 'title',
-              style: { fontSize: '15px', fontWeight: 600, marginBottom: '8px' },
-            }, t('confirm.title')),
-            React.createElement('div', {
-              key: 'body',
-              style: { opacity: 0.82, marginBottom: '8px' },
-            }, t('confirm.body')),
+            React.createElement('div', { key: 'title', style: { fontWeight: '600' } }, t('confirm.title')),
             state.title
               ? React.createElement('div', {
-                key: 'name',
-                style: { fontSize: '12px', opacity: 0.62, marginBottom: '16px', wordBreak: 'break-all' },
+                key: 'subject',
+                style: { opacity: 0.7, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
               }, state.title)
               : null,
             React.createElement('div', {
-              key: 'footer',
-              style: { display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '16px' },
+              key: 'actions',
+              style: { display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '10px' },
             }, [
               React.createElement('button', {
                 key: 'cancel',
                 type: 'button',
-                onClick: close,
-                style: dialogButton(false),
+                onClick: () => setPending(null),
+                style: buttonStyle('cancel'),
               }, t('confirm.cancel')),
               React.createElement('button', {
                 key: 'ok',
                 type: 'button',
                 disabled: busy,
                 onClick: () => void confirm(),
-                style: dialogButton(true),
+                style: buttonStyle('delete'),
               }, busy ? t('trash.loading') : t('confirm.ok')),
             ]),
-          ]))
+          ])
         }
 
-        // ---------------------------------------------------------------- trash
+        // The click that opens a menu also lands here, so the popover is pinned
+        // to wherever the user last pointed, not to the menu geometry.
+        ctx.effect(() => {
+          const remember = (event) => {
+            anchor = { x: event.clientX, y: event.clientY }
+          }
+          window.addEventListener('pointerdown', remember, true)
+          return () => window.removeEventListener('pointerdown', remember, true)
+        }, 'session-delete: pointer anchor')
+
+        ctx.effect(() => ctx.slots.inject('shell.overlay', () => ctx.slots.register({
+          name: 'shell.overlay',
+          id: 'session-eraser.confirm',
+          order: 60,
+          locale: NS,
+        }, ConfirmPopover)), 'session-delete: confirm popover')
+
         function TrashPanel() {
           const [entries, setEntries] = React.useState([])
           const [loading, setLoading] = React.useState(true)
@@ -513,13 +562,6 @@ window.__ModuleLoader__.load({
           label: () => t('menu.trash'),
         }, TrashIcon)), 'session-delete: trash sidebar entry')
 
-        ctx.effect(() => ctx.slots.inject('shell.overlay', () => ctx.slots.register({
-          name: 'shell.overlay',
-          id: 'session-eraser.confirm',
-          order: 60,
-          locale: NS,
-        }, ConfirmOverlay)), 'session-delete: confirm overlay')
-
         ctx.effect(() => ctx.contextMenus.register({
           id: 'session.trash',
           target: 'session',
@@ -553,11 +595,16 @@ window.__ModuleLoader__.load({
               separatorBefore: true,
               disabled: running,
               failureLabel: t('error.generic'),
+              // The menu closes itself before this runs, so the question is a
+              // popover of our own, pinned to the pointer with the coordinates
+              // frozen right here: no menu reopens, nothing can drift.
               run: () => {
-                if (running) return
+                const point = viewportPoint()
                 setPending({
                   sessionId: target.sessionId,
                   title: target.displayTitle ?? null,
+                  x: point.x,
+                  y: point.y,
                 })
               },
             }]

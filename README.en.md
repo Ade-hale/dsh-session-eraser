@@ -12,20 +12,20 @@ A DeepSeek Harness plugin · Web GUI · requires DSH ≥ 0.2.2-rc.5 · MIT
 
 DeepSeek Harness (DSH) sessions can be forked and archived, but never deleted: they pile up, and there is no way to actually remove one. This plugin adds the missing **Delete session** action to the session context menu. The session directory leaves the disk, its workspace, pin, and archive references are cleared in the same pass, and the sidebar updates immediately — but the directory is not unlinked. It is moved into a trash directory, and a trash panel you can open, restore from, and that expires old entries keeps the safety net usable.
 
-> Right-click a session in the sidebar → choose the red **Delete session** → press **Yes, delete** in the dialog
+> Right-click a session in the sidebar → choose **Delete session** → **No** and **Yes** appear next to the pointer; press **Yes** to delete
 >
 > The session disappears from the list at once, with a "Session deleted" toast. To get one back: **Trash** in the same menu.
 
 **It deletes thoroughly, but keeps one safety net: the trash.**
 
-> **Current version: v0.2.1** — two halves: a host half (`index.js`) registering the delete and trash routes, and a client half (`client.js`) registering the context-menu actions and the trash panel. Deleting asks first: a dialog shows the session title with No and a red Yes, delete; a session that is still running is refused. Web GUI only.
+> **Current version: v0.2.2** — two halves: a host half (`index.js`) registering the delete and trash routes, and a client half (`client.js`) registering the context-menu actions and the trash panel. Deleting asks first: choosing Delete session opens a small card next to the pointer asking whether to delete, with No as the highlighted answer; it never takes focus, and picking No, clicking elsewhere, or pressing Esc closes it. A session that is still running is refused. Web GUI only.
 
 ## Features & Current Status
 
 | Step | What it does | Status |
 | --- | --- | --- |
 | **Menu entry** | Adds a red, separator-prefixed **Delete session** entry to the session context menu, after Archive | When the session service reports the session as running the entry is disabled and reads "This session is running and cannot be deleted"; either way the host answers `409` first |
-| **Confirmation dialog** | Choosing Delete session opens a dialog with the session title, No, and a red Yes, delete; the backdrop and Esc both cancel | Rendered in the frame-wide `shell.overlay` layer, so a single stray click deletes nothing |
+| **Second-step confirm** | Choosing Delete session opens a small card next to the pointer, with No as the highlighted one | The card is placed from the pointer coordinates alone and follows no animation; picking No, clicking elsewhere, or pressing Esc closes it, so a single stray click deletes nothing |
 | **Move to trash** | Moves the session directory into `$DSH_HOME/session-delete-trash/` instead of unlinking it | The trashed name keeps a timestamp, the workspace key, and the original directory name, so restores are easy to match |
 | **Trash panel** | **Trash** in the same menu opens a panel: session directory, source workspace, deletion time, size | Restore one entry to its original workspace, delete one forever, or empty the whole trash after a second click |
 | **Retention** | Entries past the retention window (30 days by default, tunable with `DSH_SESSION_DELETE_RETENTION_DAYS`) are purged permanently | Purged whenever the trash is listed or a delete runs; nothing runs in the background |
@@ -67,7 +67,7 @@ Or install the local directory / a git URL. After install, refresh the web GUI (
 ## Use
 
 1. Right-click a session in the sidebar (or open its “…” menu).
-2. Choose **Delete session**, then press **Yes, delete** in the dialog (No, the backdrop, or Esc cancels).
+2. Choose **Delete session**: No and Yes appear next to the pointer. Press **Yes** to delete (No is the highlighted answer; No, a click elsewhere, or Esc closes them).
 3. The session disappears from the list, with a toast.
 4. To restore: choose **Trash** in the same menu and press **Restore**; the session returns to its original workspace.
 
@@ -84,7 +84,7 @@ Refresh the GUI afterwards and the session reappears in the list.
 
 ## Limitations
 
-- **The dialog is our own.** DSH exposes no confirmation dialog to plugins and forbids importing the shipped UI primitives, so the dialog is a plugin component registered into the frame-wide `shell.overlay` layer (the layer the shipped rename dialog uses); its styling is theme tokens only, so it follows light and dark.
+- **The confirmation card is drawn by the plugin, and its position comes from the pointer alone.** DSH exposes no confirmation dialog to plugins, forbids importing the shipped UI primitives, and dismisses a menu before an action runs without letting a plugin hold it open. So choosing Delete session lets the menu close as the framework wants, and the plugin draws a small card in its own overlay from the pointer coordinates captured at the click — it does not read the menu, does not animate, and never reopens a menu. There is exactly one surface on screen and nothing beside it to drift against, so it cannot shift. The card lives in `shell.overlay`, never takes focus, and closes on No, on a click elsewhere, or on Esc. Only No is red, and colours follow the light and dark theme.
 - **A misclick is still recoverable.** Even after confirming, the session directory sits intact in the trash and can be restored from the Trash panel.
 - **A running session cannot be deleted.** While its log file is held open the route answers `409`; stop it first. This is especially visible on Windows.
 - **Sub-agent child sessions are not cascaded.** The session log is a compressed append-only file, and neither it nor the projection cache records parent → child links, so children must be deleted individually from their own list.
